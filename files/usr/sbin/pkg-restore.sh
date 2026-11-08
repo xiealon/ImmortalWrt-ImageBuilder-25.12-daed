@@ -12,7 +12,8 @@
 # 上面三条管的是「该不该装」。另有一层「已装了、关键文件却被删」——
 # 由 _pr_files_ok 在「已装在册」之后补一刀（v.180.161 起）：文件缺就走
 # PCR_FORCE 按包内清单覆盖回来，不卸载、不联网。它只扫 /usr/bin、/usr/sbin、
-# /etc/init.d、/lib/*.so* 这类可执行与库，数据文件与 /etc/config 一概不碰 ——
+# /etc/init.d、/lib/*.so* 这类可执行与库，外加 kmod 包的本体
+# /lib/modules/<当前内核>/<name>.ko，数据文件与 /etc/config 一概不碰 ——
 # 所以不会退化成「逐文件比对」。
 #
 # 用法：
@@ -72,6 +73,18 @@ _pr_files_ok() {
     # apk 的清单在 /rom/lib/apk/packages/<包>.list，同样一行一个绝对路径。
     _pfo_l="$ROMDIR/lib/apk/packages/$1.list"
     [ -f "$_pfo_l" ] || return 0
+    # 【2026-11-09】kmod 包的 .list 只有两类行：
+    #   /lib/modules/<ver>/<name>.ko   模块本体
+    #   /etc/modules.d/<name>          加载规则
+    # 而白名单是 /usr/bin /usr/sbin /etc/init.d /lib/*.so* /usr/lib/*.so*，
+    # 两条都不匹配（/lib/*.so* 要求 .so，不是 .ko），于是 kmod 包整个判据
+    # 空转：.ko 删了也 return 0，「已安装，跳过」把恢复链静默断掉 ——
+    # 与 v.180.161 那个 opkg 清单路径写错的 bug 同源。
+    # 只认**当前内核版本**：换内核后旧 .list 里的 /lib/modules/6.12.103/*.ko
+    # 全部失效，会把「内核已换」误判成「文件被删」，每轮 FORCE 重装刷 flash。
+    # /etc/modules.d/* 故意不纳入 —— 删它常是手动禁用模块的手段，纳入后
+    # 每轮都会被恢复回来，跟用户意图打架；.ko 在不在才是「包坏没坏」的干净判据。
+    _pfo_kv="$(uname -r)"
     while IFS= read -r _pfo_f; do
         case "$_pfo_f" in
             /usr/bin/*|/usr/sbin/*|/etc/init.d/*|/lib/*.so*|/usr/lib/*.so*) ;;
@@ -83,6 +96,7 @@ _pr_files_ok() {
             #     笼统放开会把「用户改过模板」判成「包坏了」，每轮重装刷 flash。
             /usr/share/v2ray/geoip.dat|/usr/share/v2ray/geosite.dat) ;;
             /usr/share/daed/geoip.dat|/usr/share/daed/geosite.dat) ;;
+            /lib/modules/"$_pfo_kv"/*) ;;
             *) continue ;;
         esac
         [ -e "$PKGROOT$_pfo_f" ] || return 1
@@ -336,7 +350,7 @@ _DEPS_ROM_LIST="$ROMDIR/lib/apk/packages"
 # 自己下到 data_dir（默认 /etc/honk/data），与这两个包无关。
 _DEPS_PKGS="kmod-dummy kmod-nft-socket kmod-nft-tproxy kmod-sched-bpf
 kmod-sched-core kmod-veth kmod-inet-diag kmod-tun kmod-netlink-diag
-kmod-xdp-sockets-diag
+kmod-xdp-sockets-diag kmod-zram
 ca-bundle libcap yq ip-full firewall4 coreutils-nohup libopenssl3
 v2ray-geoip v2ray-geosite"
 
