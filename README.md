@@ -1,12 +1,14 @@
-# ImmortalWrt-ImageBuilder-25.12-honk
+# ImmortalWrt-ImageBuilder-25.12-daed
 
 给 **honk** 用的固件构建线：自建内核（带 ftrace + BTF）+ 自建 apk 全集，只有这一条线能把 honk 跑起来。
+
+在 honk 组之外，这条线额外带 daed 组：`daed` / `daed-geoip` / `daed-geosite` / `luci-app-daed` / `luci-i18n-daed-zh-cn` / `kmod-xdp-sockets-diag`，固件内共 **589** 个包。纯 honk 版见 [`ImmortalWrt-ImageBuilder-25.12`](https://github.com/xiealon/ImmortalWrt-ImageBuilder-25.12)。
 
 固件本体仍是 ImmortalWrt 25.12.2 x86-64，和 `ImmortalWrt-ImageBuilder-25.12` 一样的 CrowdSec LXC、一样的 rootfs-skel、一样的网络校验脚本。差别只在**内核和 apk 来源**。
 
 ## 三条线的差异
 
-| | 25.12 | 24.10 | 25.12-honk |
+| | 25.12 | 24.10 | 25.12-daed |
 |---|---|---|---|
 | 用途 | **主线** | 老版本线，维护用 | **跑 honk** |
 | workflow | 27,449 B / 485 行 | 27,853 B / 494 行 | **37,419 B / 641 行** |
