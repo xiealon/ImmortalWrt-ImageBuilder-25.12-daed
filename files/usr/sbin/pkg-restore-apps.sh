@@ -20,9 +20,13 @@
 #                                   0 = 全部在位；1 = 仍有缺（或装不上）
 #
 # 判据主体是包管理器认不认。本版写死 apk（25.12 线只有 apk）：apk info -e。
-# 【2026-11-02】原 daed-geoip / daed-geosite 的软链接例外随 daed 一并移除
-# （25.12 线改用 honk）；honk 的规则集由 native_api 自己下载到 data_dir，
-# 不依赖 /usr/share 下的软链接，包在册即视为数据齐备。
+# 【2026-11-02】daed 一度在 25.12 线被 honk 取代，软链接例外随之删除；
+# 【2026-11-08】honk 线与 daed 同编（用户定），例外恢复并扩成两组共四包：
+#   v2ray-geoip / v2ray-geosite   数据实体，真文件
+#   daed-geoip / daed-geosite     指向上面两个的软链接包
+# honk 自己不需要这一层：规则集按 native_api.geosite_download_url /
+# geoip_download_url 下到 data_dir（默认 /etc/honk/data），不走 /usr/share
+# 软链接，包在册即视为数据齐备。
 #   【v.180.192】补齐文件级判据（用户 2026-10-30 定）。原来这里写的是「不看文件清单」，
 #   理由是清单随版本漂 / 文件缺失 ≠ 功能缺失 / 两判据混用会死循环。这三条在
 #   「包完整在册、二进制被单独删掉」这种形态上都不成立：
@@ -346,8 +350,27 @@ _pa_repair() {
     for _pa_p in $(_pa_missing); do
         _pa_n=$((_pa_n + 1))
         log "装回 $_pa_p"
-        if "$_RESTORE" --tree "$_pa_p"; then
-            log "装回完成 $_pa_p"
+        # 【2026-11-08】按形态分两条路。原文一律走 --tree，看似通用，实际对
+        # 「包在册、只有数据/文件缺失」这种形态是空转：
+        #   --tree -> pkg-restore.sh 的 _pr_pkg -> 先判 _pr_installed（包在册=真）
+        #   -> 再判 _pr_files_ok，而它的 case 只认 /usr/bin /usr/sbin /etc/init.d
+        #   /lib/*.so* /usr/lib/*.so*，/usr/share 下的 geoip.dat 与 daed 软链接
+        #   不在判据内 -> 判「文件齐」-> 打「已安装，跳过」-> 返回 0，一个字节没写。
+        # 真机表现：每轮 --check 报缺失、每轮日志「装回完成」、永远修不好；连续
+        # PROBE_FAIL_ALERT 次后被 _apps_watch 判「需人工介入」，而提示词写的是
+        # 「多看只读基底包库里没有该包」—— 完全误导，包库里明明有。
+        # 所以：
+        #   ① 包不在册 -> --tree，连依赖一起装；
+        #   ② 包在册、判据没过 -> --force，直连 PCR_FORCE=1 -> apk fix，
+        #      按包内容重装，软链接与 .dat 都会重建。
+        if _pa_installed "$_pa_p"; then
+            if "$_RESTORE" --force "$_pa_p"; then
+                log "装回完成 $_pa_p（强制重装：包在册，数据或文件缺失）"
+            else
+                log "装回失败 $_pa_p（强制重装没成功，本地包库可能没有它）"
+            fi
+        elif "$_RESTORE" --tree "$_pa_p"; then
+            log "装回完成 $_pa_p（连依赖）"
         else
             log "装回失败 $_pa_p（本地包库没有它，或包管理器不可用）"
         fi
