@@ -1,6 +1,6 @@
 # ImmortalWrt-ImageBuilder-25.12-daed
 
-给 **honk** 用的固件构建线：自建内核（带 ftrace + BTF）+ 自建 apk 全集，只有这一条线能把 honk 跑起来。
+给 **honk / daed** 用的固件构建线：自建内核（带 ftrace + BTF）+ 自建 apk 全集。
 
 在 honk 组之外，这条线额外带 daed 组：`daed` / `daed-geoip` / `daed-geosite` / `luci-app-daed` / `luci-i18n-daed-zh-cn` / `kmod-xdp-sockets-diag`，固件内共 **589** 个包。纯 honk 版见 [`ImmortalWrt-ImageBuilder-25.12`](https://github.com/xiealon/ImmortalWrt-ImageBuilder-25.12)。
 
@@ -10,21 +10,27 @@
 
 | | 25.12 | 24.10 | 25.12-daed |
 |---|---|---|---|
-| 用途 | **主线** | 老版本线，维护用 | **跑 honk** |
-| workflow | 27,449 B / 485 行 | 27,853 B / 494 行 | **37,419 B / 641 行** |
-| `runs-on` | ubuntu-22.04 | ubuntu-22.04 | **ubuntu-24.04** |
-| ImageBuilder | 官方 docker，tag 跟下拉（25.12.0 / 25.12.1） | 官方 docker，tag 跟下拉（24.10.0 ~ 24.10.6） | **自建 IB 包**，`v25.12.2-ib-x86-64-r2` |
-| apk 来源 | 官方源 | 官方源 | **自建 pkg 包**，`v25.12.2-pkg-x86-64-r2` |
-| 版本下拉 | 2 档（25.12.0 / 25.12.1） | 7 档（24.10.0 ~ 24.10.6） | **1 档（25.12.2），不可切** |
-| 主 config | `imm25.config` 303,813 B / 8,266 行 | `imm.config` 284,106 B / 7,705 行 | `imm25.config` 303,823 B / 8,272 行 |
-| `=y` / `=m` | 968 / 1,238 | 952 / 1,005 | 1,004 / 1,227 |
-| 构建脚本 | `build25.sh` 56,581 B / 1,028 行 | `build24.sh` 47,780 B / 906 行 | `build25.sh` 63,180 B / 1,146 行 |
-| 自定义包清单 | `apk-custom-packages.sh` 11,110 B | `custom-packages.sh` 11,263 B | `apk-custom-packages.sh` 11,356 B |
-| 内核 | 官方 | 官方 | **自建，ftrace 五项 + BTF，hash `26ed6bc1`** |
-| honk 组 apk | 无 | 无 | **5 个，构建时从 `honk-apk` Release 取** |
-| `sha256/` 目录 | 无 | 无 | **有** |
+| 用途 | **纯 honk** | 老版本线，维护用 | **honk + daed** |
+| workflow | 37,645 B / 644 行 | 27,853 B / 494 行 | 37,419 B / 641 行 |
+| `runs-on` | **ubuntu-24.04** | ubuntu-22.04 | **ubuntu-24.04** |
+| ImageBuilder | **自建 IB 包**，`v25.12.2-ib-x86-64-r2` | 官方 docker，tag 跟下拉（24.10.0 ~ 24.10.6） | **自建 IB 包**，`v25.12.2-ib-x86-64-r2` |
+| apk 来源 | **自建 pkg 包**，`v25.12.2-pkg-x86-64-r2` | 官方源 | **自建 pkg 包**，`v25.12.2-pkg-x86-64-r2` |
+| 版本下拉 | **1 档（25.12.2），不可切** | 7 档（24.10.0 ~ 24.10.6） | **1 档（25.12.2），不可切** |
+| 主 config | `imm25.config` 303,823 B / 8,272 行 | `imm.config` 284,106 B / 7,705 行 | `imm25.config` 303,812 B / 8,272 行 |
+| `=y` / `=m`（全部） | **999 / 1,227** | 952 / 1,005 | **2,054 / 173** |
+| `=y` / `=m`（kmod） | **134 / 1,054** | — | **1,188 / 0** |
+| 构建脚本 | `build25.sh` 63,180 B / 1,146 行 | `build24.sh` 47,780 B / 906 行 | `build25.sh` 66,675 B / 1,192 行 |
+| 自定义包清单 | `apk-custom-packages.sh` 11,356 B | `custom-packages.sh` 11,263 B | `apk-custom-packages.sh` 11,356 B |
+| 内核 | **自建，ftrace 五项 + BTF，hash `26ed6bc1`** | 官方 | **同 25.12** |
+| honk 组 apk | **5 个，从 `honk-apk` Release 取** | 无 | **5 个** |
+| daed 组 apk | 无 | 无 | **6 个** |
+| `sha256/` 目录 | **有** | 无 | **有** |
 | CrowdSec LXC / rootfs-skel / 网络校验 | 有 | 有 | 有 |
 | 文档 | README + CROWDSEC（533 行）+ CHANGELOG（2,259 行） | 同左 | 同左 |
+
+> **25.12 已经是自建源**，不再是官方 docker + 官方源：内核是自建的（ftrace 五项 + BTF），IB 包和 1,688 个 apk 都来自 [immortalwrt-artifacts](https://github.com/xiealon/immortalwrt-artifacts)，与 25.12-daed 同源，只有 daed 组和 config 极性不同。
+>
+> **两条 25.12 线的 `=y` 差异**：daed 线把 `imm25.config` L2351~L3763 区间里 **1,054 个 `CONFIG_PACKAGE_kmod-*=m` 改成了 `=y`**（kmod 全部装进固件），所以 `=y` 从 999 涨到 2,054。
 
 **完整的 CrowdSec LXC 运行期逻辑、网络与防火墙校验、`rootfs-skel` 契约 → [CROWDSEC.md](https://github.com/xiealon/ImmortalWrt-ImageBuilder-25.12/blob/master/CROWDSEC.md)；v.103 起的改动记录 → [CHANGELOG.md](https://github.com/xiealon/ImmortalWrt-ImageBuilder-25.12/blob/master/CHANGELOG.md)**
 
@@ -132,6 +138,8 @@ honk 那 5 个 apk 不在 pkg 包里，构建时由 `build25.sh` 从 [CloudRunFi
 | `kmod-intel-lpss-acpi` | L3175 |
 | `kmod-thermal` | L3227 |
 | `kmod-acpi-video` | L3428 |
+
+上表是**显式指定**的 16 个；两条 25.12 线 config 里 `=y` 的 kmod 分别是 **134 个**（25.12）和 **1,188 个**（25.12-daed）。
 
 `shell/apk-custom-packages.sh` 里同时列出包名作为兜底，两处都有才不会漏。
 
