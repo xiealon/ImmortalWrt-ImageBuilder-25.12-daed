@@ -10,7 +10,7 @@
 
 | | 25.12 | 25.12-honk | 25.12-daed | 24.10 |
 |---|---|---|---|---|
-| 用途 | **主线，全官方源** | **纯 honk** | **honk + daed** | 老版本线，维护用 |
+| 用途 | **主线，官方源 + honk** | **纯 honk** | **honk + daed** | 老版本线，维护用 |
 | workflow | 28,506 B / 496 行 | 37,645 B / 644 行 | 37,419 B / 641 行 | 27,853 B / 494 行 |
 | `runs-on` | ubuntu-22.04 | **ubuntu-24.04** | **ubuntu-24.04** | ubuntu-22.04 |
 | ImageBuilder | 官方 docker `x86-64-openwrt-25.12.0/1/2` | **自建 IB**，`v25.12.2-ib-x86-64-r2` | **自建 IB**，同左 | 官方 docker `24.10.0 ~ 24.10.6` |
@@ -22,7 +22,7 @@
 | 构建脚本 | `build25.sh` **68,177 B / 1,234 行** | `build25.sh` **67,172 B / 1,218 行** | `build25.sh` **70,667 B / 1,264 行** | `build24.sh` **50,349 B / 950 行** |
 | 自定义包清单 | `apk-custom-packages.sh` **12,089 B** | 11,356 B | 11,356 B | `custom-packages.sh` 11,263 B |
 | 内核 | **官方**，无 `DYNAMIC_FTRACE` | **自建**，ftrace 五项 + BTF，hash `26ed6bc1` | **自建**，同左 | 官方 |
-| honk 组 apk | **默认不装**（放开那行注释即装进固件：能装、能进 LuCI，起不来） | **5 个，从 `honk-apk` Release 取** | **5 个** | 无 |
+| honk 组 apk | **默认装**（5 个，从 `honk-apk` Release 取） | **5 个，从 `honk-apk` Release 取** | **5 个** | 无 |
 | daed 组 apk | 随包清单进固件 | 无 | **6 个** | 无 |
 | `sha256/` 目录 | 有 | 有 | 有 | 无 |
 | CrowdSec LXC / rootfs-skel / 网络校验 | 有 | 有 | 有 | 有 |
