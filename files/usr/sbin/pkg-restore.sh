@@ -104,6 +104,64 @@ _pr_files_ok() {
     return 0
 }
 
+# 【2026-11-09】从只读基底把包文件拷回来。只用于「包在册、文件缺、且本地池里
+# 根本没有这个包」的情形 —— 现在只有 kmod-*。
+# 为什么不复用 pkg-cache-restore.sh：它走 apk fix，前提是池里有 .apk。实测
+# 192.168.1.201 / 25.12.2：/root/apk-cache 有 121 个 apk，全是应用包，kmod 一个
+# 都没有；全盘找不到 kmod-veth.apk。apk fix 会打
+#   [APK unavailable, skipped] Reinstalling kmod-veth
+# 然后返回 0，一个字节都没写。
+# 与 --deps --repair 同源：/rom 是 squashfs ro，文件实体删不掉，rm 只在
+# /overlay 上层写一个 whiteout 把下层遮住，所以从 /rom 拷回即可复活。
+# 只补「运行侧已不存在」的，已存在的一律不覆盖 —— 避免把用户改过的文件
+# 按出厂版盖回去（与 /etc/config 全目录排除同一条理由）。
+_pr_rom_copy() {
+    _prc_l="$ROMDIR/lib/apk/packages/$1.list"
+    [ -f "$_prc_l" ] || _prc_l="$ROMDIR/usr/lib/opkg/info/$1.list"
+    [ -f "$_prc_l" ] || return 1
+    _prc_n=0
+    _prc_bad=0
+    while IFS= read -r _prc_f; do
+        [ -n "$_prc_f" ] || continue
+        case "$_prc_f" in /etc/config/*) continue ;; esac
+        [ -e "$PKGROOT$_prc_f" ] && continue
+        [ -e "$ROMDIR$_prc_f" ] || continue
+        _prc_d="${_prc_f%/*}"
+        [ -d "$PKGROOT$_prc_d" ] || mkdir -p "$PKGROOT$_prc_d" 2>/dev/null
+        # 基底里是软链接的必须重建链接，不能 cp 实体化（会与目标脱钩）
+        _prc_ln=""
+        [ -L "$ROMDIR$_prc_f" ] && _prc_ln="$(readlink "$ROMDIR$_prc_f" 2>/dev/null)"
+        if [ -n "$_prc_ln" ]; then
+            rm -f "$PKGROOT$_prc_f" 2>/dev/null
+            if ln -s "$_prc_ln" "$PKGROOT$_prc_f" 2>/dev/null; then
+                log "补回 $_prc_f -> $_prc_ln（软链接）"
+                _prc_n=$((_prc_n + 1))
+            else
+                log "补回失败 $_prc_f（重建软链接失败）"
+                _prc_bad=$((_prc_bad + 1))
+            fi
+        elif cp -f "$ROMDIR$_prc_f" "$PKGROOT$_prc_f" 2>/dev/null; then
+            log "补回 $_prc_f"
+            _prc_n=$((_prc_n + 1))
+        else
+            log "补回失败 $_prc_f（基底不可读或目标不可写）"
+            _prc_bad=$((_prc_bad + 1))
+        fi
+    done < "$_prc_l"
+    [ "$_prc_n" -gt 0 ] || log "无需补回（清单内文件都在）"
+    [ "$_prc_bad" = "0" ]
+}
+
+# 【2026-11-09】kmod 专用兜底。返回 0 = 已从 /rom 补回且复检通过。
+# 非 kmod 包一律返回 1，不影响原有失败路径。
+_pr_kmod_fallback() {
+    case "$1" in kmod-*) ;; *) return 1 ;; esac
+    _pr_rom_copy "$1" || return 1
+    _pr_files_ok "$1" || return 1
+    log "已从只读基底补齐：$1（本地池无此包，apk fix 修不了）"
+    return 0
+}
+
 # 单包：装回。第二个参数为 1 时强制重装（跳过「已装」判定）。
 _pr_pkg() {
     _p1="$1"
@@ -135,6 +193,11 @@ _pr_pkg() {
             return 0
         fi
         log "强制重装失败：$_p1（本地库没有它，或装完文件仍缺）"
+        # 【2026-11-09】kmod 在本地池里一个都没有（实测 /root/apk-cache 121 个
+        # apk 全是应用包；全盘 kmod-*.apk 只有 2 个，还是手工 scp 进 /tmp 的），
+        # 所以对 kmod 来说上面这条「强制重装失败」是常态，不是故障。
+        # 文件实体还在 /rom 只读基底里，直接拷回即可。
+        _pr_kmod_fallback "$_p1" && return 0
         return 1
     fi
     if "$RESTORE_BIN" "$_p1" >/dev/null 2>&1; then
@@ -142,6 +205,8 @@ _pr_pkg() {
         return 0
     fi
     log "恢复失败：$_p1（本地包库没有它，或包管理器不可用）"
+    # 同上：包被 apk del 掉了、池里又没有，但 /rom 里的文件还在
+    _pr_kmod_fallback "$_p1" && return 0
     return 1
 }
 
