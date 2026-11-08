@@ -174,11 +174,19 @@ _PA_EBPF="honk luci-app-honk luci-lib-daeuniverse luci-i18n-daeuniverse-zh-cn vm
 # 由探针 _kmods_watch 连续 N 轮缺失后自动从 /rom 拷回。两条合起来才叫
 # 「删了还能自己长回来」，用户 2026-11-02 明确要求要有这一层保障。
 #
-# 为什么不在这里判文件：_pa_files_ok 的 case 只认 /usr/bin /usr/sbin
-# /etc/init.d /lib/*.so*，而 geo 两包的文件全在 /usr/share/v2ray（实测
-# v2ray-geoip.list 只有 1 行 /usr/share/v2ray/geoip.dat）。所以这一组
-# 天然只判「包在册」，不会因为 .dat 新旧去动任何字节 —— 用户
-# `apk add --upgrade v2ray-geoip` 换新数据后，这里永远判在位。
+# 判据两层（2026-11-08 补第二层）：
+#   ① 包被 apk del → _pa_should 命中出厂 P:v2ray-geoip → 装回；
+#   ② 包在、.dat 被删 → _pa_data_ok 判实体文件（新增）。
+#
+# 为什么第二层必须单独加：_pa_files_ok 的 case 只认 /usr/bin /usr/sbin
+# /etc/init.d /lib/*.so*，而 geo 两包的文件全在 /usr/share/v2ray
+# （实测 v2ray-geoip.list 只有 1 行 /usr/share/v2ray/geoip.dat），一个都不在
+# case 内。包在册但 .dat 被删时，这一组原本永远判在位 —— 而 daed-geoip 的
+# 软链接会跟着断，且修 daed-geoip 修不好（装回去还是一条指向死目标的链接）。
+# 所以实体必须自己判一次。
+#
+# 判的是「在不在」，不看新旧：用户 `apk add --upgrade v2ray-geoip`
+# 换新数据后仍判在位，不会把新数据按回出厂版。
 _PA_GEO="v2ray-geoip v2ray-geosite"
 # sing-box 是通用代理内核，原挂在 ssrp 组里，现在单独一组。
 # 它的 kmod 依赖（inet-diag / netlink-diag / tun）同样归 --deps 管。
@@ -206,7 +214,12 @@ _PA_ADBLOCK="adblock luci-app-adblock luci-i18n-adblock-zh-cn"
 #   honk 是官方 daeuniverse 源的包，预装进固件后 /rom/lib/apk/db/installed 有 P:honk，
 #   _pa_should 照常命中；被 force-remove 时同样能判出来。
 
-_PA_LIST="${CS_PROBE_APPS:-$_PA_CLASHOO $_PA_EBPF $_PA_COMMON $_PA_GEO $_PA_ADBLOCK}"
+# 顺序说明（2026-11-08）：_PA_GEO 排在 _PA_EBPF 之前。
+# geo 实体（v2ray-geoip / v2ray-geosite）才是字节所在，daed-geoip / daed-geosite
+# 只是指向它的软链接。_pa_missing 按本表顺序产出，_pa_repair 按同一顺序装回：
+# 实体先回、链接后回，一轮 repair 就能收敛；顺序反过来，第一轮装回的是链接，
+# 目标还没回来，链接依旧断。
+_PA_LIST="${CS_PROBE_APPS:-$_PA_CLASHOO $_PA_GEO $_PA_EBPF $_PA_COMMON $_PA_ADBLOCK}"
 
 log() { printf '[APP] %s\n' "$*"; }
 
@@ -248,11 +261,21 @@ _pa_should() {
 # 对照组：honk 不需要这一层 —— 它的规则集按 native_api.geosite_download_url /
 # geoip_download_url 自己下到 data_dir（默认 /etc/honk/data），不走任何软链接，
 # 包在册即认定数据齐备。
+
+# 判据顺序：实体在前、链接在后。
+#   _pa_missing 按 _PA_LIST 顺序产出缺失清单，_pa_repair 按同一顺序逐个装回。
+#   所以 _PA_LIST 里 _PA_GEO 必须排在 _PA_EBPF 之前 —— 先补 .dat、再重建软链接，
+#   一轮 repair 就收敛；顺序反过来第一轮装回的是链接，目标还没回来，链接依旧断，
+#   得等第二轮。
 _pa_data_ok() {
     case "$1" in
-    daed-geoip)   [ -e /usr/share/daed/geoip.dat ] ;;
-    daed-geosite) [ -e /usr/share/daed/geosite.dat ] ;;
-    *)            return 0 ;;
+    # ① 数据实体：真正装字节的包，先判
+    v2ray-geoip)   [ -e /usr/share/v2ray/geoip.dat ] ;;
+    v2ray-geosite) [ -e /usr/share/v2ray/geosite.dat ] ;;
+    # ② 软链接包：包里只有 $(LN)，链到上面两行；目标读不到即断链
+    daed-geoip)    [ -e /usr/share/daed/geoip.dat ] ;;
+    daed-geosite)  [ -e /usr/share/daed/geosite.dat ] ;;
+    *)             return 0 ;;
     esac
 }
 
