@@ -51,9 +51,11 @@ _pr_installed() {
 }
 
 # 记账说已装、文件却不在的情形（手删二进制，包仍在册）。
-#   判据只覆盖「可执行 / init / 共享库」这几类 —— 它们缺了包一定跑不起来；
-#   /usr/share、/etc/config 一律不看：conffiles 允许用户改动，缺失不等于包坏，
+#   判据覆盖「可执行 / init / 共享库」—— 它们缺了包一定跑不起来；
+#   /etc/config 一律不看：conffiles 允许用户改动，缺失不等于包坏，
 #   拿它当判据会把「用户改过配置」误判成「包坏了」，每轮重装一次、刷 flash。
+#   【2026-11-08】/usr/share 也基本不看，但 geo 四包例外（见下方 case）：
+#   它们是包内数据不是配置，删了分流直接走错，必须能判出来。
 #   工具：opkg 的安装清单 /rom/usr/lib/opkg/info/<pkg>.list 是文本，逐行可读；
 #   apk（25.12）的清单在二进制 installed.adb 里，取不到 → 直接放行，维持原行为。
 #   取 /rom 侧而不是运行侧：opkg remove 会把运行侧的 .list 一起删掉，
@@ -73,6 +75,14 @@ _pr_files_ok() {
     while IFS= read -r _pfo_f; do
         case "$_pfo_f" in
             /usr/bin/*|/usr/sbin/*|/etc/init.d/*|/lib/*.so*|/usr/lib/*.so*) ;;
+            # 【2026-11-08】geo 数据单独列出，精确四条，不放开 /usr/share/*：
+            #   · 它们不是用户配置，是包内数据；删了分流直接走错；
+            #   · 原 case 看不见它们，于是「包在册、.dat 被删」判成「文件齐」，
+            #     走「已安装，跳过」，永远修不回来（与 _pa_repair 那个 bug 同源）；
+            #   · 不写 /usr/share/* 是因为 lxc 等包的 .list 里也有 /usr/share 路径，
+            #     笼统放开会把「用户改过模板」判成「包坏了」，每轮重装刷 flash。
+            /usr/share/v2ray/geoip.dat|/usr/share/v2ray/geosite.dat) ;;
+            /usr/share/daed/geoip.dat|/usr/share/daed/geosite.dat) ;;
             *) continue ;;
         esac
         [ -e "$PKGROOT$_pfo_f" ] || return 1
