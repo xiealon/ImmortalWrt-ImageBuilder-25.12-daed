@@ -142,11 +142,31 @@ _RESTORE="${RESTORE_BIN:-/usr/sbin/pkg-restore.sh}"
 #   libopenssl3        固件库有、包库无 → 装不回；且它是全系统的 TLS 底座，
 #                      不属于某一个应用的依赖
 _PA_CLASHOO="clashoo luci-app-clashoo luci-i18n-clashoo-zh-cn"
-# 【2026-11-02】用户定：需要的 apk 全保护 —— honk 组补上 i18n 包，凑满 5 个。
-# luci-i18n-daeuniverse-zh-cn 是 luci-app-honk 的依赖之一（LuCI 界面要它翻中文），
-# 少了它 honk 那页会退回英文，看上去像「能用」，实际是缺件。它同样在包库里
-# （build25.sh 的 honk 保护组断言盯着这 5 个），所以装得回来，够格进这张表。
-_PA_HONK="honk luci-app-honk luci-lib-daeuniverse luci-i18n-daeuniverse-zh-cn vmlinux-btf-builtin"
+# 【2026-11-08】eBPF 代理保护线：honk + daed 两个应用合并成一组（用户定）。
+#
+# 为什么并成一组：两者共用同一套保护机制 —— 同样的 _pa_should 出厂门槛、同样的
+# 包级判据（apk info -e）、同样的 _pa_repair 装回路径。拆成两组只是把 10 个包名
+# 分成两个变量再拼回一行，以后改一处忘另一处。并成一条线后，构建期断言、运行期
+# 检查、修复入口各只有一处。
+#
+# 运行时注意：honk 与 daed 都抢 dae0/daens（netkit），可同装不可同启。
+# 保护层面互不影响 —— 缺谁装谁，与另一个在不在位无关。
+#
+# honk 5 件套（来源 A：CloudRunFilesBuilder 的 honk-apk Release）：
+#   honk
+#   luci-app-honk                        LuCI 界面
+#   luci-lib-daeuniverse                 LuCI 库依赖
+#   luci-i18n-daeuniverse-zh-cn          中文语言包，少了它 honk 那页退回英文，
+#                                        看上去像「能用」，实际是缺件
+#   vmlinux-btf-builtin                  honk 的 BTF 依赖
+# daed 5 件套（来源 B：官方 packages / luci feed）：
+#   daed                                 Go 实现 + 内嵌 Web UI
+#   daed-geoip / daed-geosite            软链接包，Makefile 只有
+#                                        $(LN) ../v2ray/geoip.dat，数据实体由
+#                                        v2ray-geoip / v2ray-geosite 提供；
+#                                        断链判据见 _pa_data_ok
+#   luci-app-daed / luci-i18n-daed-zh-cn LuCI 界面 + 中文
+_PA_EBPF="honk luci-app-honk luci-lib-daeuniverse luci-i18n-daeuniverse-zh-cn vmlinux-btf-builtin daed daed-geoip daed-geosite luci-app-daed luci-i18n-daed-zh-cn"
 # 【2026-11-02】geo 数据单独成组：包级判据（apk info -e），不判文件。
 #
 # 这一组负责的只是「包被人 apk del 掉」——装回时连文件带记账一起回来。
@@ -180,19 +200,13 @@ _PA_COMMON="sing-box"
 # 用户规则被删，宁可让他知道缺了，也不要悄悄换成一份空白的出厂白名单。
 _PA_ADBLOCK="adblock luci-app-adblock luci-i18n-adblock-zh-cn"
 
-# 【2026-11-08】daed 组：用户定 honk 线也把 daed 编进固件。
-# 5 个包全来自 25.12 官方源，build25.sh 的 daed 保护组断言盯着这 5 个，
-# 所以装得回来。判据与其他组一致：包级判在位，不看 .dat 内容
-# （daed 的 geo 数据走 data_dir，用户换新不会被按回出厂版）。
-_PA_DAED="daed daed-geoip daed-geosite luci-app-daed luci-i18n-daed-zh-cn"
-
 # 【2026-11-02】daed 在 25.12 线已被 honk 取代（用户定），原来的 geo 软链接判据一并删除：
 #   honk 的规则集不走 /usr/share/daed/*.dat 软链接，而是按 native_api.geosite_download_url /
 #   geoip_download_url 自己下到 data_dir（默认 /etc/honk/data），包在册即认定数据齐备。
 #   honk 是官方 daeuniverse 源的包，预装进固件后 /rom/lib/apk/db/installed 有 P:honk，
 #   _pa_should 照常命中；被 force-remove 时同样能判出来。
 
-_PA_LIST="${CS_PROBE_APPS:-$_PA_CLASHOO $_PA_HONK $_PA_DAED $_PA_COMMON $_PA_GEO $_PA_ADBLOCK}"
+_PA_LIST="${CS_PROBE_APPS:-$_PA_CLASHOO $_PA_EBPF $_PA_COMMON $_PA_GEO $_PA_ADBLOCK}"
 
 log() { printf '[APP] %s\n' "$*"; }
 
@@ -220,10 +234,24 @@ _pa_should() {
 
 # 已装包的「运行数据还在吗」补充判据（v.180.167）。
 # 原来只对 daed 的两个 geo 包生效（软链接断链要算缺失）。
-# 【2026-11-02】daed 在 25.12 线被 honk 取代，本线已无「包在、数据另存」的包，
-# case 里不再有任何具体分支；函数保留是为了调用点不用改，也方便日后加新判据。
+# 【2026-11-08】daed 回到本线（与 honk 同编），恢复 daed geo 软链接断链判据。
+#
+# 为什么必须单独判：daed-geoip / daed-geosite 的 Makefile 只有
+#   Depends: +daed +v2ray-geoip
+#   $(LN) ../v2ray/geoip.dat $(1)/usr/share/daed/geoip.dat
+# 也就是包里除了那条软链接什么都没有。软链接在、目标被删时：
+#   · _pa_installed 仍判「包在册」（apk 的记账没动）      → 通过
+#   · _pa_files_ok 的 case 只认 /usr/bin /usr/sbin /etc/init.d /lib/*.so*，
+#     /usr/share 不在范围内                                → 通过
+# 两个判据都放行，这个故障就漏掉了。所以这一层判的是「链接目标现在读不读得到」。
+#
+# 对照组：honk 不需要这一层 —— 它的规则集按 native_api.geosite_download_url /
+# geoip_download_url 自己下到 data_dir（默认 /etc/honk/data），不走任何软链接，
+# 包在册即认定数据齐备。
 _pa_data_ok() {
     case "$1" in
+    daed-geoip)   [ -e /usr/share/daed/geoip.dat ] ;;
+    daed-geosite) [ -e /usr/share/daed/geosite.dat ] ;;
     *)            return 0 ;;
     esac
 }
