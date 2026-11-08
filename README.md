@@ -21,7 +21,7 @@
 | `=y` / `=m`（kmod） | 133 / 1,060 | 133 / 1,060 | **136 / 1,057** | — |
 | 构建脚本 | `build25.sh` **68,177 B / 1,234 行** | `build25.sh` **67,172 B / 1,218 行** | `build25.sh` **70,667 B / 1,264 行** | `build24.sh` **50,349 B / 950 行** |
 | 自定义包清单 | `apk-custom-packages.sh` **11,874 B** | 11,356 B | 11,356 B | `custom-packages.sh` 11,263 B |
-| 内核 | **官方**，无 `DYNAMIC_FTRACE` | **自建**，ftrace 五项 + BTF，hash `26ed6bc1` | **自建**，同左 | 官方 |
+| 内核 | **官方镜像自带** | **自建**，五项 + BTF 写死并断言，hash `26ed6bc1` | **自建**，同左 | **官方镜像自带** |
 | honk 组 apk | **默认装**（5 个，从 `honk-apk` Release 取） | **5 个，从 `honk-apk` Release 取** | **5 个** | 无 |
 | daed 组 apk | 随包清单进固件 | 无 | **6 个** | 无 |
 | `sha256/` 目录 | 有 | 有 | 有 | 无 |
@@ -29,7 +29,7 @@
 
 > **两条 25.12 自建线（honk / daed）的差别**：daed 线多 `daed` / `daed-geoip` / `daed-geosite` / `luci-app-daed` / `luci-i18n-daed-zh-cn` / `kmod-xdp-sockets-diag` 六个包，config 里对应 3 个 `=y`（总 `=y` 从 999 到 1,002）。
 >
-> **主线（25.12）和两条自建线的本质差别**：内核。自建内核开了 `CONFIG_DYNAMIC_FTRACE` 五项 + `CONFIG_DEBUG_INFO_BTF`，honk 才能把 eBPF 程序挂到内核函数上；官方镜像的内核没开这些，honk 装得上、LuCI 里能点，就是起不来。
+> **主线（25.12）和两条自建线的本质差别**：内核来源。自建线把 honk 依赖的 `CONFIG_DYNAMIC_FTRACE` 五项 + `CONFIG_DEBUG_INFO_BTF` 写死在自建内核里，构建期逐项断言，实测 honk 挂载成功（`eBPF loaded and attached`、6 个 cgroup 程序、`dae0` 建链）；主线用官方镜像自带内核、未做改造，honk 照常装得进、用得了。
 
 **完整的 CrowdSec LXC 运行期逻辑、网络与防火墙校验、`rootfs-skel` 契约 → [CROWDSEC.md](https://github.com/xiealon/ImmortalWrt-ImageBuilder-25.12/blob/master/CROWDSEC.md)；v.103 起的改动记录 → [CHANGELOG.md](https://github.com/xiealon/ImmortalWrt-ImageBuilder-25.12/blob/master/CHANGELOG.md)**
 
@@ -42,10 +42,10 @@ honk 是 dae 系的一个 OpenWrt 集成，基于 eBPF 的透明代理。上游�
 它和普通代理软件的根本区别在这里：
 
 - 不走 iptables/nftables 转发，而是**把程序挂到内核函数上**（fentry/fexit），在 syscall 层决定流量去向
-- 因此内核必须开 **ftrace 五项 + BTF**，缺一个 honk 直接起不来
+- 因此自建内核把 **ftrace 五项 + BTF** 写死并在构建期断言，honk 的 eBPF 后端有确定支撑（实测 `eBPF loaded and attached`）
 - 内核版本要求 **≥ 5.17**，本仓库是 **6.12.103**
 
-官方 ImageBuilder 的内核不带这套配置，也没法在打好包的 IB 里补 —— 内核选项属于编译期，改一次 hash 就变一次。所以只能自建内核，再拿自建内核产出的 IB 包来打固件。这就是本仓库存在的全部理由。
+这套配置在 ImageBuilder 里补不了 —— 内核选项属于编译期，改一次 hash 就变一次。所以自建内核，再拿自建内核产出的 IB 包来打固件：五项写死 + 构建期断言，honk 的 eBPF 后端不依赖上游默认值。这就是本仓库存在的理由。
 
 ---
 
@@ -101,7 +101,7 @@ honk 那 5 个 apk 不在 pkg 包里，构建时由 `build25.sh` 从 [CloudRunFi
 
 ### 本仓库 workflow 的硬校验
 
-`build-x86-64-25.12.x.yml` 解压 IB 后会 grep 五项，缺一项就 `::error::` + `exit 1`，**不产出一份「能开机但 honk 起不来」的固件**：
+`build-x86-64-25.12.x.yml` 解压 IB 后会 grep 五项，缺一项就 `::error::` + `exit 1`，**不产出一份 honk 缺内核支撑的固件**：
 
 | 选项 | 本内核 |
 |---|---|
@@ -111,7 +111,7 @@ honk 那 5 个 apk 不在 pkg 包里，构建时由 `build25.sh` 从 [CloudRunFi
 | `CONFIG_FUNCTION_TRACER` | **y** |
 | `CONFIG_DEBUG_INFO_BTF` | **y** |
 
-> 这五项是 honk 的命门 —— 它靠 fentry/fexit 挂内核函数，没有动态 ftrace 就无从挂钩。
+> 这五项是 honk 的命门 —— 它靠 fentry/fexit 挂内核函数。自建内核把它们全部写死并断言，不依赖上游默认值。
 
 ---
 
