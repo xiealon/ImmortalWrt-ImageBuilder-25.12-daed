@@ -180,13 +180,19 @@ _PA_COMMON="sing-box"
 # 用户规则被删，宁可让他知道缺了，也不要悄悄换成一份空白的出厂白名单。
 _PA_ADBLOCK="adblock luci-app-adblock luci-i18n-adblock-zh-cn"
 
+# 【2026-11-08】daed 组：用户定 honk 线也把 daed 编进固件。
+# 5 个包全来自 25.12 官方源，build25.sh 的 daed 保护组断言盯着这 5 个，
+# 所以装得回来。判据与其他组一致：包级判在位，不看 .dat 内容
+# （daed 的 geo 数据走 data_dir，用户换新不会被按回出厂版）。
+_PA_DAED="daed daed-geoip daed-geosite luci-app-daed luci-i18n-daed-zh-cn"
+
 # 【2026-11-02】daed 在 25.12 线已被 honk 取代（用户定），原来的 geo 软链接判据一并删除：
 #   honk 的规则集不走 /usr/share/daed/*.dat 软链接，而是按 native_api.geosite_download_url /
 #   geoip_download_url 自己下到 data_dir（默认 /etc/honk/data），包在册即认定数据齐备。
 #   honk 是官方 daeuniverse 源的包，预装进固件后 /rom/lib/apk/db/installed 有 P:honk，
 #   _pa_should 照常命中；被 force-remove 时同样能判出来。
 
-_PA_LIST="${CS_PROBE_APPS:-$_PA_CLASHOO $_PA_HONK $_PA_COMMON $_PA_GEO $_PA_ADBLOCK}"
+_PA_LIST="${CS_PROBE_APPS:-$_PA_CLASHOO $_PA_HONK $_PA_DAED $_PA_COMMON $_PA_GEO $_PA_ADBLOCK}"
 
 log() { printf '[APP] %s\n' "$*"; }
 
