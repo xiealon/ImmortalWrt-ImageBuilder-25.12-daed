@@ -16,9 +16,9 @@
 | ImageBuilder | **自建 IB 包**，`v25.12.2-ib-x86-64-r2` | 官方 docker，tag 跟下拉（24.10.0 ~ 24.10.6） | **自建 IB 包**，`v25.12.2-ib-x86-64-r2` |
 | apk 来源 | **自建 pkg 包**，`v25.12.2-pkg-x86-64-r2` | 官方源 | **自建 pkg 包**，`v25.12.2-pkg-x86-64-r2` |
 | 版本下拉 | **1 档（25.12.2），不可切** | 7 档（24.10.0 ~ 24.10.6） | **1 档（25.12.2），不可切** |
-| 主 config | `imm25.config` 303,823 B / 8,272 行 | `imm.config` 284,106 B / 7,705 行 | `imm25.config` 303,812 B / 8,272 行 |
-| `=y` / `=m`（全部） | **999 / 1,227** | 952 / 1,005 | **2,054 / 173** |
-| `=y` / `=m`（kmod） | **133 / 1,060** | — | **1,188 / 6** |
+| 主 config | `imm25.config` 303,823 B / 8,272 行 | `imm.config` 284,106 B / 7,705 行 | `imm25.config` 303,823 B / 8,272 行 |
+| `=y` / `=m`（全部） | **999 / 1,227** | 952 / 1,005 | **1,002 / 1,224** |
+| `=y` / `=m`（kmod） | **133 / 1,060** | — | **136 / 1,057** |
 | 构建脚本 | `build25.sh` 63,180 B / 1,146 行 | `build24.sh` 47,780 B / 906 行 | `build25.sh` 66,675 B / 1,192 行 |
 | 自定义包清单 | `apk-custom-packages.sh` 11,356 B | `custom-packages.sh` 11,263 B | `apk-custom-packages.sh` 11,356 B |
 | 内核 | **自建，ftrace 五项 + BTF，hash `26ed6bc1`** | 官方 | **同 25.12** |
@@ -30,7 +30,7 @@
 
 > **25.12 已经是自建源**，不再是官方 docker + 官方源：内核是自建的（ftrace 五项 + BTF），IB 包和 1,688 个 apk 都来自 [immortalwrt-artifacts](https://github.com/xiealon/immortalwrt-artifacts)，与 25.12-daed 同源，只有 daed 组和 config 极性不同。
 >
-> **两条 25.12 线的 `=y` 差异**：daed 线把 `imm25.config` L2351~L3763 区间里 **1,054 个 `CONFIG_PACKAGE_kmod-*=m` 改成了 `=y`**（kmod 全部装进固件），所以 `=y` 从 999 涨到 2,054。
+> **两条 25.12 线的 config 只差 3 行**：`kmod-sched-bpf`、`kmod-xdp-sockets-diag`、`kmod-zram` 在 daed 线是 `=y`、在 25.12 线是 `=m`。其余 kmod 极性完全一致，所以 `=y` / `=m` 只相差这 3 项。
 
 **完整的 CrowdSec LXC 运行期逻辑、网络与防火墙校验、`rootfs-skel` 契约 → [CROWDSEC.md](https://github.com/xiealon/ImmortalWrt-ImageBuilder-25.12/blob/master/CROWDSEC.md)；v.103 起的改动记录 → [CHANGELOG.md](https://github.com/xiealon/ImmortalWrt-ImageBuilder-25.12/blob/master/CHANGELOG.md)**
 
