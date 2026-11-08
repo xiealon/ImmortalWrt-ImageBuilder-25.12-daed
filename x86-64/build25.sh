@@ -157,9 +157,6 @@ PACKAGES=""
 PACKAGES="$PACKAGES curl"
 PACKAGES="$PACKAGES luci-i18n-diskman-zh-cn"
 PACKAGES="$PACKAGES luci-i18n-firewall-zh-cn"
-PACKAGES="$PACKAGES luci-theme-argon"
-PACKAGES="$PACKAGES luci-app-argon-config"
-PACKAGES="$PACKAGES luci-i18n-argon-config-zh-cn"
 PACKAGES="$PACKAGES luci-i18n-package-manager-zh-cn"
 PACKAGES="$PACKAGES luci-i18n-ttyd-zh-cn"
 PACKAGES="$PACKAGES openssh-sftp-server"
@@ -620,8 +617,7 @@ daed daed-geoip daed-geosite luci-app-daed luci-i18n-daed-zh-cn
 crowdsec-firewall-bouncer luci-app-crowdsec-firewall-bouncer
 luci-i18n-crowdsec-firewall-bouncer-zh-cn nftables-json
 v2ray-geoip v2ray-geosite sing-box
-geoview rtp2httpd luci-app-rtp2httpd luci-i18n-rtp2httpd-zh-cn
-luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn
+geoview
 adblock luci-app-adblock luci-i18n-adblock-zh-cn"
 
 # 来源 A：packages/ 里 run 包解出的 apk（第三方包，官方源没有）
@@ -680,6 +676,30 @@ for _f in packages/*.apk; do
     # 实测 201 上 /rom/root/apk-cache 里有 luci-app-daede-1.14.7-r4.apk，85,493 B，
     # 既没装也不在白名单，纯占 squashfs。按包名前缀排除，不写死版本号。
     luci-app-daede-[0-9]* | luci-i18n-daede-[0-9]*)
+        _ak_skip_stale="$_ak_skip_stale ${_f##*/}"
+        continue
+        ;;
+    # 【2026-11-09】以下包**不需要离线保护**：不是系统组件，反向依赖为空
+    # （apk info 实测 rdeps=0 或仅被自己的语言包依赖），删了联网即可装回：
+    #   argon 三包      默认主题是 bootstrap，该主题根本没启用
+    #   partexp 两包    分区扩容工具
+    #   taskplan 两包   计划任务界面
+    #   rtp2httpd 三包  RTSP->HTTP 代理
+    # 合计约 828 KB，没必要占 squashfs。argon 已同时从 PACKAGES 移除，
+    # 这里再挡一道的原因是：run 包可能仍来自移除前的构建。
+    luci-theme-argon-* | luci-app-argon-config-* | luci-i18n-argon-config-zh-cn-*)
+        _ak_skip_stale="$_ak_skip_stale ${_f##*/}"
+        continue
+        ;;
+    luci-app-partexp-* | luci-i18n-partexp-zh-cn-*)
+        _ak_skip_stale="$_ak_skip_stale ${_f##*/}"
+        continue
+        ;;
+    luci-app-taskplan-* | luci-i18n-taskplan-zh-cn-*)
+        _ak_skip_stale="$_ak_skip_stale ${_f##*/}"
+        continue
+        ;;
+    rtp2httpd-* | luci-app-rtp2httpd-* | luci-i18n-rtp2httpd-zh-cn-*)
         _ak_skip_stale="$_ak_skip_stale ${_f##*/}"
         continue
         ;;
