@@ -2,7 +2,7 @@
 
 给 **honk / daed** 用的固件构建线：自建内核（带 ftrace + BTF）+ 自建 apk 全集。
 
-在 honk 组之外，这条线额外带 daed 组：`daed` / `daed-geoip` / `daed-geosite` / `luci-app-daed` / `luci-i18n-daed-zh-cn` / `kmod-xdp-sockets-diag`，固件内共 **589** 个包。纯 honk 版见 [`ImmortalWrt-ImageBuilder-25.12`](https://github.com/xiealon/ImmortalWrt-ImageBuilder-25.12)。
+在 honk 组之外，这条线额外带 daed 组：`daed` / `daed-geoip` / `daed-geosite` / `luci-app-daed` / `luci-i18n-daed-zh-cn` / `kmod-xdp-sockets-diag`，固件内共 **586** 个包。纯 honk 版见 [`ImmortalWrt-ImageBuilder-25.12`](https://github.com/xiealon/ImmortalWrt-ImageBuilder-25.12)。
 
 固件本体仍是 ImmortalWrt 25.12.2 x86-64，和 `ImmortalWrt-ImageBuilder-25.12` 一样的 CrowdSec LXC、一样的 rootfs-skel、一样的网络校验脚本。差别只在**内核和 apk 来源**。
 
@@ -20,7 +20,7 @@
 | `=y` / `=m`（全部） | 999 / 1,227 | 999 / 1,227 | **1,002 / 1,224** | 952 / 1,005 |
 | `=y` / `=m`（kmod） | 133 / 1,060 | 133 / 1,060 | **136 / 1,057** | — |
 | 构建脚本 | `build25.sh` **68,177 B / 1,234 行** | `build25.sh` **67,172 B / 1,218 行** | `build25.sh` **70,667 B / 1,264 行** | `build24.sh` **50,349 B / 950 行** |
-| 自定义包清单 | `apk-custom-packages.sh` **12,089 B** | 11,356 B | 11,356 B | `custom-packages.sh` 11,263 B |
+| 自定义包清单 | `apk-custom-packages.sh` **11,874 B** | 11,356 B | 11,356 B | `custom-packages.sh` 11,263 B |
 | 内核 | **官方**，无 `DYNAMIC_FTRACE` | **自建**，ftrace 五项 + BTF，hash `26ed6bc1` | **自建**，同左 | 官方 |
 | honk 组 apk | **默认装**（5 个，从 `honk-apk` Release 取） | **5 个，从 `honk-apk` Release 取** | **5 个** | 无 |
 | daed 组 apk | 随包清单进固件 | 无 | **6 个** | 无 |
