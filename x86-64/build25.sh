@@ -651,6 +651,7 @@ _ak_a=0
 _ak_skip_btf=""
 _ak_skip_geo=""
 _ak_bad_a=""
+_ak_skip_stale=""
 for _f in packages/*.apk; do
     [ -f "$_f" ] || continue
     case "${_f##*/}" in
@@ -673,6 +674,13 @@ for _f in packages/*.apk; do
         _ak_skip_geo="$_ak_skip_geo ${_f##*/}"
         continue
         ;;
+    # 【2026-11-09】luci-app-daede / luci-i18n-daede-zh-cn 是改名前的旧名残留。
+    # 实测 201 上 /rom/root/apk-cache 里有 luci-app-daede-1.14.7-r4.apk，85,493 B，
+    # 既没装也不在白名单，纯占 squashfs。按包名前缀排除，不写死版本号。
+    luci-app-daede-[0-9]* | luci-i18n-daede-[0-9]*)
+        _ak_skip_stale="$_ak_skip_stale ${_f##*/}"
+        continue
+        ;;
     esac
     # 拷之前先验文件头：坏文件不进库，否则它会以「已存在」挡住官方源的好版本
     if ! _ak_is_apk "$_f"; then
@@ -690,6 +698,9 @@ if [ -n "$_ak_skip_btf" ]; then
 fi
 if [ -n "$_ak_skip_geo" ]; then
     echo "==> [apk-cache] 已排除 run 包里的 geo 数据（统一走官方源，避免多版本被 apk 挑错）：$_ak_skip_geo"
+fi
+if [ -n "$_ak_skip_stale" ]; then
+    echo "==> [apk-cache] 已排除改名前的旧包：$_ak_skip_stale"
 fi
 
 # ---- 【2026-11-08】保护组在库核对：honk + daed 合并成一条 eBPF 保护线 ----
@@ -832,14 +843,29 @@ if [ -n "$_AK_DL" ]; then
             # run 包优先：packages/ 里已有【且合法】的同名包就不再下官方版。
             # 【v.180.134】原来只看文件名在不在，坏文件会一直挡住官方版；
             # 现在顺手把同名的坏文件删掉，让官方版能补进来。
+            # 【2026-11-09】同名包比版本，不再「run 包一律优先」。
+            # 201 实测：luci-app-daed 库里是 1.4-r1、luci-i18n-daed-zh-cn 是
+            # 25.283.11553~bce4b5f，而固件实装都是 26.298.29275~c84adb9。
+            # 后果：pkg-restore.sh --force 走 apk fix 按「已装版本」找包，
+            # 报 APK unavailable 直接返回失败 ——「包在册、文件被删」修不回来。
+            # 官方源不低于 run 包就替换；只有 run 包确实更高才保留。
             _ak_keep=0
             for _ak_e in "$_AK_DIR/$_ak_nm"-*.apk; do
                 [ -f "$_ak_e" ] || continue
-                if _ak_is_apk "$_ak_e"; then
-                    _ak_keep=1
-                else
+                if ! _ak_is_apk "$_ak_e"; then
                     rm -f "$_ak_e"
                     echo "::warning::丢弃非法 apk（交回官方源）：${_ak_e##*/}"
+                    continue
+                fi
+                _ak_ev="${_ak_e##*/}"
+                _ak_ev="${_ak_ev#"$_ak_nm"-}"
+                _ak_ev="${_ak_ev%.apk}"
+                if [ -n "$_AK_BIN" ] && [ "$("$_AK_BIN" version -t "$_ak_ev" "$_ak_ver" 2>/dev/null)" = ">" ]; then
+                    _ak_keep=1
+                    echo "==> [apk-cache] 保留 run 包更高版：$_ak_nm $_ak_ev（官方 $_ak_ver）"
+                else
+                    rm -f "$_ak_e"
+                    echo "==> [apk-cache] 官方版替换 run 包：$_ak_nm $_ak_ev -> $_ak_ver"
                 fi
             done
             [ "$_ak_keep" = "1" ] && continue
@@ -858,6 +884,30 @@ echo "==> [apk-cache] 来源 B（官方源 index.json 直下）：$_ak_b 个 apk
 if [ -n "$_ak_miss" ]; then
     echo "::warning::以下包在官方源上没下到（可能已改名或不在 25.12.2 源里）：$_ak_miss"
 fi
+
+# ---- 【2026-11-09】同名多版本去重 ----
+# run 包实测会带同一个包两个版本（201 上 daed-2026.06.14-r1 与 -r7 并存，差 25MB）。
+# 旧版白占 squashfs，还会让 apk fix 找「已装版本」时多绕。只留版本最高的。
+# 包名取法：从左起第一个「以数字开头」的 -段 之前就是包名（版本必以数字开头，
+# 而 lxc-auto-6.0.5-r1 这类包名自带连字符，所以不能从右往左截）。
+_ak_pn_of() {
+    printf '%s' "$1" | awk -F'-' '{pn=""; for(i=1;i<=NF;i++){ if($i ~ /^[0-9]/) break; pn=(pn==""?$i:pn"-"$i) } if(pn!="") print pn}'
+}
+_ak_dupes=$(ls "$_AK_DIR"/*.apk 2>/dev/null | sed 's#.*/##; s#\.apk$##' | while read -r _ak_bn; do _ak_pn_of "$_ak_bn"; done | sort | uniq -d)
+_ak_dedup_n=0
+for _ak_dp in $_ak_dupes; do
+    _ak_best=$(ls "$_AK_DIR/$_ak_dp"-[0-9]*.apk 2>/dev/null | sed 's#.*/##; s#\.apk$##' | sort -V | tail -1)
+    [ -n "$_ak_best" ] || continue
+    for _ak_f2 in "$_AK_DIR/$_ak_dp"-[0-9]*.apk; do
+        [ -f "$_ak_f2" ] || continue
+        _ak_bn2="${_ak_f2##*/}"
+        [ "${_ak_bn2%.apk}" = "$_ak_best" ] && continue
+        rm -f "$_ak_f2"
+        _ak_dedup_n=$((_ak_dedup_n + 1))
+        echo "==> [apk-cache] 同名去重：删 ${_ak_bn2}（保留 ${_ak_best}.apk）"
+    done
+done
+echo "==> [apk-cache] 去重共删 $_ak_dedup_n 个旧版本"
 
 _ak_n=$(ls "$_AK_DIR"/*.apk 2>/dev/null | wc -l)
 _ak_sz=$(du -sh "$_AK_DIR" 2>/dev/null | cut -f1)
