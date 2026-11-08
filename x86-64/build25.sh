@@ -165,6 +165,10 @@ PACKAGES="$PACKAGES luci-i18n-ttyd-zh-cn"
 PACKAGES="$PACKAGES openssh-sftp-server"
 
 PACKAGES="$PACKAGES luci-i18n-filemanager-zh-cn"
+# 【2026-11-08】daed 与 honk 一起编入（用户定）。
+# 两者都是 eBPF 代理，运行时抢同一套 dae0/daens，只能启用一个；
+# 这里只保证两套 apk 都在固件里，用哪个由 LuCI 启停决定。
+PACKAGES="$PACKAGES daed daed-geoip daed-geosite luci-app-daed luci-i18n-daed-zh-cn"
 PACKAGES="$PACKAGES $CUSTOM_PACKAGES"
 
 
@@ -599,6 +603,7 @@ lxc-unshare lxc-usernsexec lxc-wait liblxc rpcd-mod-lxc
 luci-app-lxc luci-i18n-lxc-zh-cn
 smartdns luci-app-smartdns
 mosdns
+daed daed-geoip daed-geosite luci-app-daed luci-i18n-daed-zh-cn
 crowdsec-firewall-bouncer luci-app-crowdsec-firewall-bouncer
 luci-i18n-crowdsec-firewall-bouncer-zh-cn nftables-json
 v2ray-geoip v2ray-geosite sing-box
@@ -869,6 +874,22 @@ if [ -n "$_ak_geo_miss" ]; then
 else
     echo "==> [apk-cache] geo 数据包齐备（只核 apk，不核 .dat 内容）"
 fi
+
+# ---- 【2026-11-08】daed 保护组在库核对 ----
+# 与 25.12 线同一套判据：pkg-restore-apps.sh 的 _PA_DAED 只负责发现缺失，
+# 真正装回来靠 /rom/root/apk-cache 里这份库。库里没有就每轮白报警，
+# 所以构建期当场断言。5 个包全来自官方源，核对点必须在来源 B 之后。
+_ak_need_daed="daed daed-geoip daed-geosite luci-app-daed luci-i18n-daed-zh-cn"
+_ak_daed_miss=""
+for _ak_nd in $_ak_need_daed; do
+    ls "$_AK_DIR"/"$_ak_nd"-[0-9]*.apk >/dev/null 2>&1 || _ak_daed_miss="$_ak_daed_miss $_ak_nd"
+done
+if [ -n "$_ak_daed_miss" ]; then
+    echo "::error::daed 保护组缺包，探针将无法装回：$_ak_daed_miss"
+    echo "::error::这 5 个都来自官方源，先看上面来源 B 的 missing 列表"
+    exit 1
+fi
+echo "==> [apk-cache] daed 保护组齐备（5 包）：$_ak_need_daed"
 
 if [ "$_ak_n" -lt 100 ]; then
     echo "::error::apk-cache 只收到 $_ak_n 个包，远低于预期（run 包约 75 + 官方白名单约 49）"
