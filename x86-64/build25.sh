@@ -679,25 +679,14 @@ if [ -n "$_ak_skip_geo" ]; then
     echo "==> [apk-cache] 已排除 run 包里的 geo 数据（统一走官方源，避免多版本被 apk 挑错）：$_ak_skip_geo"
 fi
 
-# ---- 【2026-11-02】保护组在库核对 ----
-# pkg-restore-apps.sh 的 _PA_HONK / _PA_GEO 只负责「发现缺失」；真正装回来
-# 靠的是 /rom/root/apk-cache 里这份本地包库。库里没有对应 apk 的话，
-# 探针每轮报缺失、每轮修不好 —— 那不是保护，是每轮白报一次警。
-# 所以在构建期当场核对，别把空头支票留到真机。
-if echo "$PACKAGES" | grep -q "honk"; then
-    _ak_need_honk="honk luci-app-honk luci-lib-daeuniverse luci-i18n-daeuniverse-zh-cn vmlinux-btf-builtin"
-    _ak_honk_miss=""
-    for _ak_np in $_ak_need_honk; do
-        ls "$_AK_DIR"/"$_ak_np"-[0-9]*.apk >/dev/null 2>&1 || _ak_honk_miss="$_ak_honk_miss $_ak_np"
-    done
-    if [ -n "$_ak_honk_miss" ]; then
-        echo "::error::honk 保护组缺包，探针将无法装回：$_ak_honk_miss"
-        echo "::error::来源 A 看 packages/*.apk（CloudRunFilesBuilder 的 honk-apk Release）"
-        ls -la "$_AK_DIR" 2>/dev/null | grep -i honk || true
-        exit 1
-    fi
-    echo "==> [apk-cache] honk 保护组齐备（5 包）：$_ak_need_honk"
-fi
+# ---- 【2026-11-08】保护组在库核对：honk + daed 合并成一条 eBPF 保护线 ----
+# 用户定：honk 与 daed 一起编固件，保护机制合并成一条线。
+#
+# 这段核对已挪到来源 B 之后（见下方「eBPF 保护组在库核对」），原因：
+#   · honk 5 件套来自来源 A（packages/），来源 A 之后就已在库，随时可查；
+#   · daed 5 件套来自来源 B（官方源），必须等来源 B 下载完才在库。
+# 两段分开写，同一套判据维护两遍，改一处忘一处；并成一段统一在 B 之后查，
+# 此时两边都已就位，一处核对覆盖全部 10 个包。
 
 # geo 两包的核对放在来源 B 之后 —— 它们来自官方源，不是 packages/。
 
@@ -875,21 +864,40 @@ else
     echo "==> [apk-cache] geo 数据包齐备（只核 apk，不核 .dat 内容）"
 fi
 
-# ---- 【2026-11-08】daed 保护组在库核对 ----
-# 与 25.12 线同一套判据：pkg-restore-apps.sh 的 _PA_DAED 只负责发现缺失，
-# 真正装回来靠 /rom/root/apk-cache 里这份库。库里没有就每轮白报警，
-# 所以构建期当场断言。5 个包全来自官方源，核对点必须在来源 B 之后。
-_ak_need_daed="daed daed-geoip daed-geosite luci-app-daed luci-i18n-daed-zh-cn"
-_ak_daed_miss=""
-for _ak_nd in $_ak_need_daed; do
-    ls "$_AK_DIR"/"$_ak_nd"-[0-9]*.apk >/dev/null 2>&1 || _ak_daed_miss="$_ak_daed_miss $_ak_nd"
-done
-if [ -n "$_ak_daed_miss" ]; then
-    echo "::error::daed 保护组缺包，探针将无法装回：$_ak_daed_miss"
-    echo "::error::这 5 个都来自官方源，先看上面来源 B 的 missing 列表"
-    exit 1
+# ---- 【2026-11-08】eBPF 保护组（honk + daed）在库核对 ----
+# 用户定：honk 与 daed 一起编固件，保护机制合并成一条线。
+# pkg-restore-apps.sh 的 _PA_EBPF 只负责「发现缺失」；真正装回来靠的是
+# /rom/root/apk-cache 里这份本地包库。库里没有对应 apk 的话，探针每轮报缺失、
+# 每轮修不好 —— 那不是保护，是每轮白报一次警。所以构建期当场核对。
+#
+# 核对点必须在这里（来源 B 之后）：
+#   honk 5 件套来自来源 A（CloudRunFilesBuilder honk-apk Release），此刻早已在库；
+#   daed 5 件套来自来源 B（daed / daed-geoip / daed-geosite 在 packages feed，
+#   luci-app-daed 与 i18n 在 luci feed），必须等来源 B 下载完才在库。
+#
+# 按 PACKAGES 里实际选了什么决定查哪一半：只选 honk 时不应因为库里没 daed 包
+# 而失败，反之亦然。honk 线两个都选，就是 10 个全查。
+_ak_need_ebpf=""
+if echo "$PACKAGES" | grep -q "honk"; then
+    _ak_need_ebpf="honk luci-app-honk luci-lib-daeuniverse luci-i18n-daeuniverse-zh-cn vmlinux-btf-builtin"
 fi
-echo "==> [apk-cache] daed 保护组齐备（5 包）：$_ak_need_daed"
+if echo "$PACKAGES" | grep -q "daed"; then
+    _ak_need_ebpf="$_ak_need_ebpf daed daed-geoip daed-geosite luci-app-daed luci-i18n-daed-zh-cn"
+fi
+if [ -n "$_ak_need_ebpf" ]; then
+    _ak_ebpf_miss=""
+    for _ak_ne in $_ak_need_ebpf; do
+        ls "$_AK_DIR"/"$_ak_ne"-[0-9]*.apk >/dev/null 2>&1 || _ak_ebpf_miss="$_ak_ebpf_miss $_ak_ne"
+    done
+    if [ -n "$_ak_ebpf_miss" ]; then
+        echo "::error::eBPF 保护组缺包，探针将无法装回：$_ak_ebpf_miss"
+        echo "::error::honk 五件套看来源 A（packages/*.apk，CloudRunFilesBuilder 的 honk-apk Release）"
+        echo "::error::daed 五件套看来源 B 的 missing 列表（官方 feed）"
+        ls -la "$_AK_DIR" 2>/dev/null | grep -iE "honk|daed" || true
+        exit 1
+    fi
+    echo "==> [apk-cache] eBPF 保护组齐备（$(echo $_ak_need_ebpf | wc -w) 包）：$_ak_need_ebpf"
+fi
 
 if [ "$_ak_n" -lt 100 ]; then
     echo "::error::apk-cache 只收到 $_ak_n 个包，远低于预期（run 包约 75 + 官方白名单约 49）"
