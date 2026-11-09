@@ -75,6 +75,8 @@ _pr_files_ok() {
     while IFS= read -r _pfo_f; do
         case "$_pfo_f" in
             /usr/bin/*|/usr/sbin/*|/etc/init.d/*|/lib/*.so*|/usr/lib/*.so*) ;;
+            # 【2026-11-09】lxc 专有四类：PID1 与配置模板，前一分支看不见。
+            /sbin/*|/etc/lxc/*|/usr/share/lxc/*|/usr/lib/lxc/*) ;;
             # 【2026-11-08】geo 数据单独列出，精确四条，不放开 /usr/share/*：
             #   · 它们不是用户配置，是包内数据；删了分流直接走错；
             #   · 原 case 看不见它们，于是「包在册、.dat 被删」判成「文件齐」，
