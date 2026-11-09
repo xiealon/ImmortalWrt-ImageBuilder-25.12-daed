@@ -170,7 +170,7 @@ _PA_CLASHOO="clashoo luci-app-clashoo luci-i18n-clashoo-zh-cn"
 #                                        v2ray-geoip / v2ray-geosite 提供；
 #                                        断链判据见 _pa_data_ok
 #   luci-app-daed / luci-i18n-daed-zh-cn LuCI 界面 + 中文
-_PA_EBPF="honk luci-app-honk luci-lib-daeuniverse luci-i18n-daeuniverse-zh-cn vmlinux-btf-builtin daed daed-geoip daed-geosite luci-app-daed luci-i18n-daed-zh-cn"
+_PA_EBPF="honk luci-app-honk daed daed-geoip daed-geosite luci-app-daed luci-i18n-daed-zh-cn"
 # 【2026-11-02】geo 数据单独成组：包级判据（apk info -e），不判文件。
 #
 # 这一组负责的只是「包被人 apk del 掉」——装回时连文件带记账一起回来。
