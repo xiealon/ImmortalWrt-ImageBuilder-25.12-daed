@@ -18,7 +18,7 @@ CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-rtp2httpd luci-i18n-rtp2httpd-zh-cn"
 # 所以这里不带 @tag —— 走的是本地包，不是 apk 源。
 # luci-lib-daeuniverse 是 luci-app-honk 的运行依赖；vmlinux-btf-builtin 是 BTF 哨兵，
 # 显式列出是为了让「缺包」在构建期就暴露，而不是靠依赖解析碰运气。
-CUSTOM_PACKAGES="$CUSTOM_PACKAGES honk luci-app-honk luci-lib-daeuniverse luci-i18n-daeuniverse-zh-cn vmlinux-btf-builtin"
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES honk luci-app-honk"
 CUSTOM_PACKAGES="$CUSTOM_PACKAGES geoview sing-box luci-compat kmod-tun kmod-inet-diag kmod-nft-tproxy kmod-nft-socket bash curl lua unzip"
 CUSTOM_PACKAGES="$CUSTOM_PACKAGES clashoo luci-app-clashoo luci-i18n-clashoo-zh-cn"
 CUSTOM_PACKAGES="$CUSTOM_PACKAGES yq kmod-dummy ca-bundle"
