@@ -270,7 +270,7 @@ _gh_fixname() {
 # 为什么换：openwrt.daeuniverse.org 是上游 beta 期临时源，包随时可能被撤；
 # 而 honk-apk Release 是同一套 apk 的镜像，版本由 CloudRunFilesBuilder 定时跟踪。
 # 落点与 OpenClash 一致（packages/），make image 会把它当本地包装进固件。
-# 依赖一并取：luci-app-honk 要 luci-lib-daeuniverse；vmlinux-btf-builtin 是 BTF 哨兵，
+# kenzok8 两件套：doona 面板（3.8 MB）直接打进 luci-app-honk，不提 luci-lib / i18n / btf 哨兵；
 # 装前检查 /sys/kernel/btf/vmlinux，缺了 honk-core 起不来。
 if echo "$PACKAGES" | grep -q "honk"; then
     _hk_api="https://api.github.com/repos/xiealon/CloudRunFilesBuilder/releases/tags/honk-apk"
@@ -282,7 +282,7 @@ if echo "$PACKAGES" | grep -q "honk"; then
         exit 1
     fi
     _hk_n=0
-    for _hk_pkg in honk luci-app-honk luci-lib-daeuniverse luci-i18n-daeuniverse-zh-cn vmlinux-btf-builtin; do
+    for _hk_pkg in honk luci-app-honk; do
         # 【2026-11-08 修】取版本号最大的，不取第一个匹配。
         # 起因：honk-apk Release 升到 beta5 时，旧的 beta4 资产没被删掉，
         # assets 列表里 beta4 排在前面，head -n1 会挑到旧版 —— 构建出来还是旧固件。
@@ -964,7 +964,7 @@ fi
 # 而失败，反之亦然。honk 线两个都选，就是 10 个全查。
 _ak_need_ebpf=""
 if echo "$PACKAGES" | grep -q "honk"; then
-    _ak_need_ebpf="honk luci-app-honk luci-lib-daeuniverse luci-i18n-daeuniverse-zh-cn vmlinux-btf-builtin"
+    _ak_need_ebpf="honk luci-app-honk"
 fi
 if echo "$PACKAGES" | grep -q "daed"; then
     _ak_need_ebpf="$_ak_need_ebpf daed daed-geoip daed-geosite luci-app-daed luci-i18n-daed-zh-cn"
@@ -976,7 +976,7 @@ if [ -n "$_ak_need_ebpf" ]; then
     done
     if [ -n "$_ak_ebpf_miss" ]; then
         echo "::error::eBPF 保护组缺包，探针将无法装回：$_ak_ebpf_miss"
-        echo "::error::honk 五件套看来源 A（packages/*.apk，CloudRunFilesBuilder 的 honk-apk Release）"
+        echo "::error::honk 两件套看来源 A（packages/*.apk，CloudRunFilesBuilder 的 honk-apk Release）"
         echo "::error::daed 五件套看来源 B 的 missing 列表（官方 feed）"
         ls -la "$_AK_DIR" 2>/dev/null | grep -iE "honk|daed" || true
         exit 1
