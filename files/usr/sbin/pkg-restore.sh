@@ -351,10 +351,22 @@ _DEPS_ROM_LIST="$ROMDIR/lib/apk/packages"
 # （后者 apk info -e 看得见，直接 PCR_FORCE 重装、记账一起回来）。
 # 老固件没装这个包时 /rom 里没有它的 .list，本表第一行 [ -f ] 直接跳过，
 # 零动作零日志 —— 不会把「没带这个包的固件」误判成缺件。
+# 【2026-11-10】补 honk 的依赖链缺口（实测 apk info -R honk 列出来的）：
+#   kmod-nf-conntrack / kmod-nfnetlink-queue / kmod-nft-core / kmod-nft-queue
+#   libstdcpp6
+# 之前这 5 个只在 honk 装上时才由包管理器带进来，被 apk del 掉之后没有任何
+# 通道能把文件拉回来 —— libstdcpp6 缺了 honk 直接起不来（C++ 运行库），
+# 四个 nft/conntrack 模块缺了规则下发不下去。
+# /rom 侧清单实测：5 条 / 2 条 / 13 条 / 2 条 / 2 条，逐条 [ -e ] 全在位，
+# 所以走逐路径恢复是有效的。
+#
+# 不加 vmlinux-btf：实测它只含 lib/apk/packages/vmlinux-btf-builtin.list 一个文件，
+# BTF 数据由内核在 /sys/kernel/btf/vmlinux 运行时生成，没有实体文件要护。
 _DEPS_PKGS="kmod-dummy kmod-nft-socket kmod-nft-tproxy kmod-sched-bpf
 kmod-sched-core kmod-veth kmod-inet-diag kmod-tun kmod-netlink-diag
 kmod-xdp-sockets-diag kmod-zram
-ca-bundle libcap yq ip-full firewall4 coreutils-nohup coreutils-timeout libopenssl3
+kmod-nf-conntrack kmod-nfnetlink-queue kmod-nft-core kmod-nft-queue
+ca-bundle libcap yq ip-full firewall4 coreutils-nohup coreutils-timeout libopenssl3 libstdcpp6
 v2ray-geoip v2ray-geosite"
 
 # 输出「基底有、运行侧缺或为空」的绝对路径。返回 2 = 基底里一份清单都没有。
