@@ -72,3 +72,133 @@ _sd_discard() {
     uci -q revert smartdns 2>/dev/null
     return 0
 }
+
+# =====================================================================
+# 【2026-11-10】两步结构支持：判定函数集中在这里
+#
+# 为什么放 _lib 而不是各步骤脚本里：
+#   90-check.sh 的四态（0/1/3/4）是探针的接口，不能变；而 01~06 又要能各自
+#   单独 --check。两处若各写一份判据，改一处忘另一处就会「检查说好、修复说坏」，
+#   表现为每轮都重写一遍配置、永远不收敛。所以判定只此一份。
+# =====================================================================
+
+# 上游基准表（用户 2026-11-07 定，内容一字未改；注释行保留记录选型理由）。
+# 05-upstream.sh 按它写入，_sd_upstream_ok 按它比对 —— 同一份表，不会漂移。
+sd_upstream_table() {
+    cat <<'SD_UPSTREAM_EOF'
+# 【2026-11-07】CN 组改 DoT：实测本链路 TCP 53 被干扰（阿里/腾讯连上即 RST、
+# 百度 SYN 无回应），而 853 端口可达且解析正常（91 B，与 UDP 同长）。
+# 只有这 3 条实测可用：阿里 2 条、腾讯 1 条（dot.pub → 120.53.53.53）。
+# 百度 / 360 / CNNIC 的 853 不通或解析失败，全部淘汰。
+alidns 223.5.5.5 tls CN dns.alidns.com
+alidns 223.6.6.6 tls CN dns.alidns.com
+dnspod 120.53.53.53 tls CN dot.pub
+google 8.8.8.8 tls out dns.google
+# out 组：honk 开着时才可达（8.8.8.8 的 853/443、dns.google 的 DoH、
+# cloudflare 的 DoH 都能真解析出 91 B；cloudflare 的 853 与 1.1.1.1 的 DoT 均为 0 B）。
+# DoH 必须写域名，用 IP 形式（https://8.8.8.8/dns-query）实测 0 B 失败。
+google https://dns.google/dns-query https out dns.google
+cloudflare https://cloudflare-dns.com/dns-query https out cloudflare-dns.com
+SD_UPSTREAM_EOF
+}
+
+# 规则文件「基座有、运行期没有」就算不完整。0=齐，1=缺。
+# 只看「基座有、运行期没有」：基座本来就没有的不算缺，否则每轮判坏又补不回来。
+_sd_conf_ok() {
+    _sc_miss=0
+    for _sc_f in $SD_CONF_FILES; do
+        [ -e "$ROMDIR/etc/smartdns/$_sc_f" ] || continue
+        if [ ! -e "$PKGROOT/etc/smartdns/$_sc_f" ]; then
+            printf '[PKG] 缺规则文件：/etc/smartdns/%s\n' "$_sc_f" >&2
+            _sc_miss=1
+        fi
+    done
+    [ "$_sc_miss" = 0 ]
+}
+
+# custom.conf 里必须有一模一样的 localhost 行（整行精确匹配，不是子串）
+_sd_localrule_ok() {
+    if [ ! -f "$PKGROOT/etc/smartdns/custom.conf" ]; then
+        printf '[PKG] 缺文件：/etc/smartdns/custom.conf\n' >&2
+        return 1
+    fi
+    grep -qxF "$_SD_LOCALRULE" "$PKGROOT/etc/smartdns/custom.conf" 2>/dev/null && return 0
+    printf '[PKG] 缺 localhost 本地解析：/etc/smartdns/custom.conf\n' >&2
+    return 1
+}
+
+# 主配置段：逐项比对 04-config.sh 会写的那 12 项（以及必须不存在的 bind）。
+# 这 12 项都是「不写就跑不对」的，其余四项（no_cache / no_speed_check /
+# no_dualstack_selection / force_aaaa_soa）故意交给 LuCI，这里也不判。
+_sd_cfg_ok() {
+    _scg_seg=$(uci -q show smartdns 2>/dev/null | sed -n 's/^smartdns\.\([^.=]*\)=smartdns$/\1/p' | head -n1)
+    if [ -z "$_scg_seg" ]; then
+        printf '[SD] 缺 smartdns 主配置段\n' >&2
+        return 1
+    fi
+    _scg_bad=0
+    for _scg_kv in \
+        enabled=1 \
+        port=53 \
+        bind_device=0 \
+        auto_set_dnsmasq=1 \
+        server_flags=-group\ CN \
+        seconddns_enabled=1 \
+        seconddns_port=6553 \
+        seconddns_tcp_server=1 \
+        seconddns_server_group=out \
+        cache_size=32768 \
+        serve_expired=1 \
+        prefetch_domain=1; do
+        _scg_k=${_scg_kv%%=*}
+        _scg_v=${_scg_kv#*=}
+        _scg_cur=$(uci -q get "smartdns.$_scg_seg.$_scg_k" 2>/dev/null)
+        if [ "$_scg_cur" != "$_scg_v" ]; then
+            printf '[SD] 主配置 %s=%s（应为 %s）\n' "$_scg_k" "${_scg_cur:-空}" "$_scg_v" >&2
+            _scg_bad=1
+        fi
+    done
+    if uci -q get "smartdns.$_scg_seg.bind" >/dev/null 2>&1; then
+        printf '[SD] 主配置残留 bind（不是 UCI 选项，应为空）\n' >&2
+        _scg_bad=1
+    fi
+    [ "$_scg_bad" = 0 ]
+}
+
+# 上游：条数 = 6，且每条按 ip 找到对应段后逐字段比对。
+# 不按顺序比：段的顺序不影响解析，盯顺序只会误报。
+_sd_upstream_ok() {
+    _suo_cnt=$(uci -q show smartdns 2>/dev/null | grep -c '=server$')
+    case "$_suo_cnt" in ''|*[!0-9]*) _suo_cnt=-1 ;; esac
+    if [ "$_suo_cnt" != "6" ]; then
+        printf '[SD] 上游条数 %s（应为 6）\n' "$_suo_cnt" >&2
+        return 1
+    fi
+    _suo_bad=0
+    _suo_segs=$(uci -q show smartdns 2>/dev/null | sed -n 's/^smartdns\.\([^.=]*\)=server$/\1/p')
+    sd_upstream_table | while read -r _suo_n _suo_ip _suo_tp _suo_grp _suo_host; do
+        case "$_suo_n" in ''|'#'*) continue ;; esac
+        [ -n "$_suo_ip" ] || continue
+        _suo_hit=""
+        for _suo_s in $_suo_segs; do
+            if [ "$(uci -q get "smartdns.$_suo_s.ip" 2>/dev/null)" = "$_suo_ip" ]; then
+                _suo_hit="$_suo_s"
+                break
+            fi
+        done
+        if [ -z "$_suo_hit" ]; then
+            printf '[SD] 缺上游 %s\n' "$_suo_ip" >&2
+            echo BAD
+            continue
+        fi
+        [ "$(uci -q get "smartdns.$_suo_hit.type" 2>/dev/null)" = "$_suo_tp" ] || {
+            printf '[SD] 上游 %s 的 type 不符\n' "$_suo_ip" >&2; echo BAD; continue; }
+        [ "$(uci -q get "smartdns.$_suo_hit.server_group" 2>/dev/null)" = "$_suo_grp" ] || {
+            printf '[SD] 上游 %s 的 server_group 不符\n' "$_suo_ip" >&2; echo BAD; continue; }
+        if [ "$_suo_host" != "-" ]; then
+            [ "$(uci -q get "smartdns.$_suo_hit.host_name" 2>/dev/null)" = "$_suo_host" ] || {
+                printf '[SD] 上游 %s 的 host_name 不符\n' "$_suo_ip" >&2; echo BAD; continue; }
+        fi
+    done | grep -q BAD && return 1
+    return 0
+}

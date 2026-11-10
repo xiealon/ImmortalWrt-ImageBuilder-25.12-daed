@@ -12,24 +12,27 @@
 # 判据：整行精确匹配（grep -xF），不是子串 ——
 # 否则 address /localhost/127.0.0.2 这种也会被判成已配好。
 #
-# 退出码：0 已生效或写入成功 / 1 写入失败
+# 两步结构：--check 只判行在不在；无参数 = 补行
+# 退出码：--check 0 在 / 1 不在；修复 0 已生效或写入成功 / 1 写入失败
 
 _here=$(cd "$(dirname "$0")" && pwd)
 . "$_here/_lib.sh"
 
-# 判定：文件不在 / 行不在，都算缺（判定与写入共用同一份 _SD_LOCALRULE）
-_sd_localrule_ok() {
-    if [ ! -f "$PKGROOT/etc/smartdns/custom.conf" ]; then
-        printf '[PKG] 缺文件：/etc/smartdns/custom.conf\n' >&2
-        return 1
-    fi
-    grep -qxF "$_SD_LOCALRULE" "$PKGROOT/etc/smartdns/custom.conf" 2>/dev/null && return 0
-    printf '[PKG] 缺 localhost 本地解析：/etc/smartdns/custom.conf\n' >&2
-    return 1
-}
+# 两步结构：--check 只判不写，无参数 = 修复
+case "${1:-}" in
+--check)
+    _sd_localrule_ok && exit 0
+    exit 1
+    ;;
+"")
+    ;;
+*)
+    echo "用法：$0 [--check]" >&2
+    exit 2
+    ;;
+esac
 
-_sd_localrule_ok && exit 0
-
+# 判定函数 _sd_localrule_ok 在 _lib.sh（90-check 与各步骤共用同一份）
 _slr_f="$PKGROOT/etc/smartdns/custom.conf"
 [ -d "$PKGROOT/etc/smartdns" ] || mkdir -p "$PKGROOT/etc/smartdns" 2>/dev/null
 [ -f "$_slr_f" ] || : >"$_slr_f"

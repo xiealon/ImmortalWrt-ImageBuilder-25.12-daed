@@ -21,6 +21,20 @@
 _here=$(cd "$(dirname "$0")" && pwd)
 . "$_here/_lib.sh"
 
+# 两步结构：--check 只判不写，无参数 = 修复
+case "${1:-}" in
+--check)
+    _sd_serve && exit 0
+    exit 1
+    ;;
+"")
+    ;;
+*)
+    echo "用法：$0 [--check]" >&2
+    exit 2
+    ;;
+esac
+
 uci commit smartdns || { log "uci commit smartdns 失败"; _sd_discard; exit 1; }
 [ -x /etc/init.d/smartdns ] || { log "没有 /etc/init.d/smartdns，无法重启"; exit 1; }
 

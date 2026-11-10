@@ -6,10 +6,25 @@
 # 只写 uci 暂存（/tmp/.uci），不 commit —— 落地是 06-apply.sh 的事。
 # 单独跑本步骤后若决定不落地，用 `uci revert smartdns` 丢弃。
 #
-# 退出码：0 写入成功 / 1 失败
+# 两步结构：--check 逐项比对主配置段（判定在 _lib.sh 的 _sd_cfg_ok）
+# 退出码：--check 0 达标 / 1 有项不符；修复 0 写入成功 / 1 失败
 
 _here=$(cd "$(dirname "$0")" && pwd)
 . "$_here/_lib.sh"
+
+# 两步结构：--check 只判不写，无参数 = 修复
+case "${1:-}" in
+--check)
+    _sd_cfg_ok && exit 0
+    exit 1
+    ;;
+"")
+    ;;
+*)
+    echo "用法：$0 [--check]" >&2
+    exit 2
+    ;;
+esac
 
 # smartdns 主配置段的段名；没有则回空
 _sd_main_seg() {

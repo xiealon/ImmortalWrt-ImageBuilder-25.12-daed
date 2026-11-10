@@ -10,10 +10,25 @@
 #   smartdns: open config file 'address.conf' failed → procd 记 crash loop
 #   → 53 全空 → 探针判进程不在 → 重跑 bootstrap → 再挂。
 #
-# 退出码：0 补齐或本来就不缺 / 1 失败
+# 两步结构：--check 只判缺哪个文件（判定在 _lib.sh 的 _sd_conf_ok）
+# 退出码：--check 0 齐 / 1 缺；修复 0 补齐或本来就不缺 / 1 失败
 
 _here=$(cd "$(dirname "$0")" && pwd)
 . "$_here/_lib.sh"
+
+# 两步结构：--check 只判不写，无参数 = 修复
+case "${1:-}" in
+--check)
+    _sd_conf_ok && exit 0
+    exit 1
+    ;;
+"")
+    ;;
+*)
+    echo "用法：$0 [--check]" >&2
+    exit 2
+    ;;
+esac
 
 _n=0
 for _f in $SD_CONF_FILES; do
