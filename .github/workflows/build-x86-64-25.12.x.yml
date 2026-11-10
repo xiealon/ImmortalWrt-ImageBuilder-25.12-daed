@@ -164,7 +164,7 @@ jobs:
           # 必须带执行位，否则开机后 guard 调不动、探针 120 秒循环也起不来。
           for _x in files/usr/sbin/bootstrap/bootstrap.sh \
                     files/usr/sbin/crowdsec-guard-watch.sh \
-                    files/usr/sbin/smartdns/restore.sh \
+                    files/usr/sbin/smartdns-restore/restore.sh \
                     files/usr/sbin/adblock/restore.sh; do
             [ -x "${{ github.workspace }}/$_x" ] \
               || { echo "::error::$_x 无执行位（拆分后的自愈入口）"; exit 1; }
