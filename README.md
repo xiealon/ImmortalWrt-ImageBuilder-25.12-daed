@@ -14,6 +14,7 @@
    /usr/sbin/bootstrap/bootstrap.sh --full
 
 # 说明
+
 给 **honk / daed** 用的固件构建线：自建内核（带 ftrace + BTF）+ 自建 apk 全集。
 
 在 honk 组之外，这条线额外带 daed 组：`daed` / `daed-geoip` / `daed-geosite` / `luci-app-daed` / `luci-i18n-daed-zh-cn` / `kmod-xdp-sockets-diag`，固件内共 **586** 个包。纯 honk 版见 [`ImmortalWrt-ImageBuilder-25.12`](https://github.com/xiealon/ImmortalWrt-ImageBuilder-25.12)。
